@@ -61,6 +61,8 @@ supported public-launch path — see **Deploying** below.
 
 ## Deploying (Railway / Render / VPS) — supported
 
+Full click-by-click walkthrough in **[DEPLOY.md](DEPLOY.md)**. Summary:
+
 The server is database-pluggable: with no `DATABASE_URL` it reads your local
 SQLite store (the default, on your machine); with `DATABASE_URL` set it reads a
 hosted Postgres instead. Same UI, same endpoints.
