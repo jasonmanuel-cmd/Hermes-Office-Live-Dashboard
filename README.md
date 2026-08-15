@@ -55,24 +55,49 @@ function. Three hard blockers on Vercel:
 3. **`node:sqlite` + `execFileSync` shell calls** (repair scanner runs
    `python -c` / `node --check`) are sandboxed/unavailable in Vercel's runtime.
 
-### What a real "launch on Vercel" would require
+**Bottom line:** do NOT `vercel deploy` this. But it IS fully deployable to a
+real host (Railway / Render / any VPS) against a hosted Postgres. That's the
+supported public-launch path — see **Deploying** below.
 
-- A **hosted database** (Supabase / Neon) that mirrors your local session
-  store, plus a sync job that copies sessions there on an interval.
-- A **hosted always-on server** (Railway, Render, Fly, a VPS, or a long-running
-  Vercel Background Function / Cron + a stateful host) running `visualize.mjs`,
-  pointed at that hosted DB.
-- The Vercel/frontend would then be a thin static client hitting that hosted
-  server's API — OR you skip Vercel entirely and just run this on a small VPS
-  (cheapest, closest to current behavior).
+## Deploying (Railway / Render / VPS) — supported
 
-**Bottom line:** commit this repo for versioning / backup / sharing. To make it
-publicly reachable, run it on a VPS or Railway/Render against a hosted DB — do
-not expect `vercel deploy` to work.
+The server is database-pluggable: with no `DATABASE_URL` it reads your local
+SQLite store (the default, on your machine); with `DATABASE_URL` set it reads a
+hosted Postgres instead. Same UI, same endpoints.
+
+### One-time setup
+1. Create a hosted Postgres (Supabase / Neon / Railway Postgres). Get its URL.
+2. Run the schema:  `psql "$DATABASE_URL" -f schema.sql`
+   (or paste `schema.sql` into the provider's SQL editor).
+3. On YOUR MACHINE, install the sync driver and run the sync:
+   ```bash
+   npm install pg
+   DATABASE_URL=postgres://user:pass@host:5432/db node sync_to_db.mjs
+   ```
+   This mirrors your local sessions (+ messages) into the hosted DB, read-only
+   on the source side. Put it on a cron (every 5 min) to keep the public board live.
+4. Deploy the repo to Railway (`railway.json` provided) or Render (`render.yaml`
+   provided):
+   - Build: `npm install`  ·  Start: `node scripts/visualize.mjs`
+   - Set env `DATABASE_URL` to the hosted Postgres URL. `PORT` is injected.
+   - Health check: `GET /`
+5. Open the deployed URL — you'll see the same board, now public.
+
+### Local (default)
+```bash
+npm install && npm install @vgalletti/hermes-office
+node scripts/visualize.mjs        # reads local state.db; http://127.0.0.1:4173
+```
+
+> Note: Vercel is still not suitable (ephemeral functions + no `node:sqlite`).
+> Railway/Render run a real long-lived Node process, so they work.
 
 ## Files
 
 - `scripts/visualize.mjs` — the server (board + SSE + live poll + all endpoints).
+- `sync_to_db.mjs` — mirrors local store → hosted Postgres (run on your machine).
+- `schema.sql` — hosted Postgres tables.
+- `railway.json` / `render.yaml` — one-click deploy configs.
 - `scripts/package.json` — declares `@vgalletti/hermes-office`.
 - `scripts/verify_*.sh` — smoke tests.
 - `references/` — SQLite store notes + Vercel CLI quirks.
@@ -81,6 +106,8 @@ not expect `vercel deploy` to work.
 
 - The session store is opened **read-only** (`pragma query_only = on`) — the
   dashboard can never corrupt your live sessions.
+- The sync (`sync_to_db.mjs`) only READS your local store and WRITES to the
+  separate hosted DB — it never mutates your local sessions.
 - Improve/Finish spawn background agents that are **double-gated** (button +
   confirm) and instructed to never commit to main, never force-push, never
   delete. All actions are written to an append-only `audit.log`.

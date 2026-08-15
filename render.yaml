@@ -1,0 +1,21 @@
+# Render.com deploy config
+# 1. New Web Service -> connect this repo.
+# 2. Set env: DATABASE_URL = your hosted Postgres internal URL.
+# 3. Build: npm install   Start: node scripts/visualize.mjs
+# 4. The dashboard reads sessions from Postgres (kept in sync by sync_to_db.mjs on your machine).
+services:
+  - type: web
+    name: hermes-office-live-dashboard
+    runtime: node
+    plan: starter
+    branch: main
+    buildCommand: npm install
+    startCommand: node scripts/visualize.mjs
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # set this in the Render dashboard to your Postgres URL
+      - key: PORT
+        sync: false   # Render injects PORT automatically
+      - key: NODE_VERSION
+        value: "22"

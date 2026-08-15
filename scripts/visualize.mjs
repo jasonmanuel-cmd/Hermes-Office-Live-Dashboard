@@ -23,6 +23,20 @@ const POLL_MS = 5000;
 const STALE_H = 2;
 const DB_PATH = `${process.env.LOCALAPPDATA}/hermes/profiles/cipher/state.db`;
 
+// ---------- Database layer: local SQLite (default) OR hosted Postgres ----------
+// LOCAL: reads the live session store directly (read-only). This is the default
+//   and what runs on your machine at http://127.0.0.1:4173.
+// HOSTED: when DATABASE_URL is set (Railway/Render/VPS), reads from a hosted
+//   Postgres that a local `sync_to_db.mjs` keeps in sync with your machine.
+//   Same UI/endpoints either way. See README "Deploying" for the full setup.
+const USE_PG = !!process.env.DATABASE_URL;
+let pgPool = null;
+if (USE_PG) {
+  const { Pool } = await import('pg');
+  pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  console.log('[db] using hosted Postgres (DATABASE_URL set)');
+}
+
 // ---------- H: safety hardening — audit log + guardrail enforcement ----------
 const AUDIT_DIR = `${process.env.LOCALAPPDATA}/hermes-office`;
 const AUDIT_FILE = `${AUDIT_DIR}/audit.log`;
@@ -51,21 +65,25 @@ const GUARDRAIL_CLAUSE =
   'Propose changes on a branch and open a PR; wait for human approval before any destructive step.';
 
 // ---------- open live store (read-only) ----------
+// LOCAL: open the machine's SQLite session store read-only. Skipped when using Postgres.
 let db;
-try {
-  db = new DatabaseSync(DB_PATH);
-  db.exec('pragma query_only = on;');
-} catch (e) {
-  console.error(`Cannot open live session store at ${DB_PATH}\n${e.message}`);
-  process.exit(1);
+if (!USE_PG) {
+  try {
+    db = new DatabaseSync(DB_PATH);
+    db.exec('pragma query_only = on;');
+  } catch (e) {
+    console.error(`Cannot open live session store at ${DB_PATH}\n${e.message}`);
+    process.exit(1);
+  }
 }
 
 const COLS = `id, title, source, model, message_count, tool_call_count,
   last_activity_at, last_activity_description, end_reason, pinned, git_repo_root, started_at`;
 
 function rowToAgent(r) {
-  // A1: normalize timestamps — last_activity_at -> started_at -> 0 (epoch floor)
-  const lastActive = r.last_activity_at || r.started_at || 0;
+  // Coerce: Postgres returns BIGINT/INTEGER as strings; SQLite as numbers.
+  const num = (v) => (v === null || v === undefined ? v : Number(v));
+  const lastActive = num(r.last_activity_at) ?? num(r.started_at) ?? 0;
   const base = sessionToAgent({
     id: r.id, title: r.title, source: r.source, model: r.model,
     last_active: lastActive, end_reason: r.end_reason,
@@ -85,10 +103,10 @@ function rowToAgent(r) {
     model: r.model || base.model,
     source: r.source || base.source,
     activityDetail: r.last_activity_description || (open ? 'active' : 'ended'),
-    messageCount: r.message_count ?? 0,
-    toolCalls: r.tool_call_count ?? 0,
+    messageCount: num(r.message_count) ?? 0,
+    toolCalls: num(r.tool_call_count) ?? 0,
     pinned: !!r.pinned,
-    startedAt: r.started_at ? new Date(r.started_at * 1000).toISOString() : undefined,
+    startedAt: num(r.started_at) ? new Date(num(r.started_at) * 1000).toISOString() : undefined,
     gitRepoRoot: r.git_repo_root || undefined,
   };
 }
@@ -114,13 +132,19 @@ function computeKpi(agents) {
   return { active, thinking, errors, abandoned, ended, total: agents.length, tasks: tickets.length, projects: 0 };
 }
 
-function loadLive() {
+async function loadLive() {
+  if (USE_PG) {
+    const r = await pgPool.query(`select ${COLS} from sessions`);
+    return r.rows.map(rowToAgent);
+  }
   return db.prepare(`select ${COLS} from sessions order by last_activity_at desc`).all().map(rowToAgent);
 }
 
-const store = new OfficeEventStore(loadLive());
-store.apply({ type: 'snapshot', agents: store.snapshot() });
-setInterval(() => { try { store.apply({ type: 'snapshot', agents: loadLive() }); } catch (e) {} }, POLL_MS);
+const store = new OfficeEventStore([]);
+(async () => {
+  try { store.apply({ type: 'snapshot', agents: await loadLive() }); } catch (e) { console.error('initial load failed:', e.message); }
+  setInterval(async () => { try { store.apply({ type: 'snapshot', agents: await loadLive() }); } catch (e) {} }, POLL_MS);
+})();
 
 // GROUP E — activity timeline (E1/E2/E4): in-memory event buffer, diff consecutive
 // snapshots to emit ONLY real status transitions (no spam every poll).
@@ -173,8 +197,20 @@ function send(res, obj) {
 }
 
 // GET /messages?id=...  -> read-only messages for one session
-function messagesFor(id) {
+async function messagesFor(id) {
   try {
+    if (USE_PG) {
+      const r = await pgPool.query(
+        `select role, content, tool_name, timestamp from messages where session_id = $1 order by timestamp asc limit 60`,
+        [id]
+      );
+      return r.rows.map((m) => ({
+        role: m.role,
+        tool: m.tool_name || null,
+        at: m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : null,
+        text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      }));
+    }
     const rows = db.prepare(
       `select role, content, tool_name, timestamp from messages where session_id = ? order by timestamp asc limit 60`
     ).all(id);
@@ -464,7 +500,7 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/messages') {
     const id = url.searchParams.get('id') || '';
-    return send(res, { id, messages: messagesFor(id) });
+    return send(res, { id, messages: await messagesFor(id) });
   }
   if (url.pathname === '/projects') {
     return send(res, await getProjects());
