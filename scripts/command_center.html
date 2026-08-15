@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes Command Center</title>
+<style>
+  :root{
+    --bg:#0B0F17; --card:#161F30; --border:#1E293B; --muted:#64748B; --text:#E2E8F0;
+    --cyan:#22D3EE; --emerald:#34D399; --amber:#FBBF24; --rose:#F87171; --violet:#A78BFA;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;display:grid;grid-template-columns:280px 1fr 330px;grid-template-rows:48px 1fr;height:100vh;overflow:hidden}
+  header{grid-column:1/4;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--border);background:#0D131F}
+  header .brand{font-weight:700;letter-spacing:.08em;color:var(--cyan)}
+  header .conn{padding:2px 9px;border:1px solid var(--border);border-radius:999px;font-size:11px}
+  header .conn.live{color:var(--emerald);border-color:#065f46}
+  header .conn.off{color:var(--rose);border-color:#7f1d1d}
+  header .spacer{flex:1}
+  header .kpi{font-size:11px;color:var(--muted)}
+  header .kpi b{color:var(--text)}
+  header a{color:var(--muted);text-decoration:none;border:1px solid var(--border);padding:3px 9px;border-radius:6px;font-size:11px}
+  header a:hover{color:var(--text);border-color:var(--cyan)}
+
+  aside,main,section{overflow:auto}
+  .left{border-right:1px solid var(--border);background:#0D131F;display:flex;flex-direction:column}
+  .right{border-left:1px solid var(--border);background:#0D131F;padding:12px;display:flex;flex-direction:column;gap:12px}
+  .search{padding:10px;border-bottom:1px solid var(--border)}
+  .search input{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 9px;font:inherit;outline:none}
+  .search input:focus{border-color:var(--cyan)}
+  .fleettree{flex:1;overflow:auto;padding:6px}
+  .grp{font-size:10px;letter-spacing:.1em;color:var?;color:#475569;text-transform:uppercase;margin:10px 6px 4px}
+  .agent{padding:7px 9px;border:1px solid transparent;border-radius:7px;cursor:pointer;margin-bottom:3px;background:#111827}
+  .agent:hover{border-color:var(--border)}
+  .agent.sel{background:var(--card);border-color:rgba(34,211,238,.4);box-shadow:0 0 12px rgba(34,211,238,.12)}
+  .agent .nm{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px}
+  .agent .nm .id{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .dot.active{background:var(--emerald);box-shadow:0 0 6px var(--emerald)}
+  .dot.waiting{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+  .dot.thinking{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+  .dot.error{background:var(--rose);box-shadow:0 0 6px var(--rose)}
+  .dot.idle{background:#334155}
+  .agent .meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px}
+  .agent .meta .st{color:var(--amber)}
+
+  main{display:flex;flex-direction:column;background:var(--bg)}
+  .streamhdr{height:46px;border-bottom:1px solid var(--border);background:#0D131F;display:flex;align-items:center;gap:12px;padding:0 16px}
+  .streamhdr .aid{font-weight:700;color:#fff}
+  .streamhdr .acts{margin-left:auto;display:flex;gap:8px}
+  .streamhdr button{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer;font-size:11px}
+  .streamhdr button:hover{border-color:var(--cyan)}
+  .streamhdr button.danger{color:var(--rose);border-color:#7f1d1d}
+  .stream{flex:1;overflow:auto;padding:16px}
+  .msg{display:flex;flex-direction:column;margin-bottom:10px;max-width:78%}
+  .msg.user{align-self:flex-end;align-items:flex-end}
+  .msg .hd{font-size:10px;color:var(--muted);margin-bottom:2px}
+  .msg .bd{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;white-space:pre-wrap;word-break:break-word}
+  .msg.user .bd{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4);color:#cffafe}
+  .msg.sys .bd{background:#0D131F;border-color:var(--border);color:var(--muted);font-size:11px}
+  .empty{color:var(--muted);text-align:center;margin-top:40px;font-size:12px}
+  .composer{border-top:1px solid var(--border);background:#0D131F;display:flex;gap:8px;padding:10px 12px}
+  .composer input{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font:inherit;outline:none}
+  .composer input:focus{border-color:var(--cyan)}
+  .composer button{background:var(--cyan);color:#04222a;font-weight:700;border:none;border-radius:8px;padding:0 16px;cursor:pointer;font:inherit}
+  .composer button:hover{background:#22d3ee}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:11px;font-size:12px}
+  .card h4{margin:0 0 8px;font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:6px}
+  .card .row{display:flex;justify-content:space-between;font-size:11px;color:var(--text);padding:2px 0}
+  .card .row span:first-child{color:var(--muted)}
+  .bar{height:6px;border-radius:3px;background:#0b1020;overflow:hidden;margin:5px 0 8px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--emerald),var(--cyan));}
+  .bar.warn>i{background:linear-gradient(90deg,var(--amber),var(--rose));}
+  .board .mb{margin-bottom:8px}
+  .board .mf{font-size:10px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .board .mf .mg{background:#0b1020;border:1px solid var(--border);border-radius:999px;padding:0 6px;color:var(--cyan)}
+  .board .mt{background:#0D131F;border:1px solid var(--border);border-radius:7px;padding:6px 8px;margin-top:3px;font-size:11px;white-space:pre-wrap;word-break:break-word}
+  .badge{font-size:9px;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+  .tag-err{color:var(--rose);border-color:#7f1d1d}
+  .tag-ok{color:var(--emerald);border-color:#065f46}
+  .tag-warn{color:var(--amber);border-color:#78350f}
+  .scanitem{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbtitle{font-weight:700;color:var(--text)}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">HERMES COMMAND CENTER</span>
+  <span id="conn" class="conn off">DISCONNECTED</span>
+  <span class="kpi">fleet <b id="kActive">–</b> active · <b id="kAb">–</b> abandoned · <b id="kErr">–</b> errors</span>
+  <span class="spacer"></span>
+  <a href="/" target="_blank">Classic view</a>
+  <a href="/command" target="_blank">Open standalone</a>
+</header>
+
+<aside class="left">
+  <div class="search"><input id="fleetSearch" placeholder="search agents / models…"></div>
+  <div class="fleettree" id="fleet"></div>
+</aside>
+
+<main>
+  <div class="streamhdr">
+    <span class="aid" id="aid">no agent selected</span>
+    <span class="badge" id="astate">—</span>
+    <div class="acts">
+      <button id="btnInterrupt" class="danger">Interrupt</button>
+      <button id="btnWake">Wake / rescan</button>
+    </div>
+  </div>
+  <div class="stream" id="stream"><div class="empty">Select an agent from the fleet to inspect its live thread.</div></div>
+  <form class="composer" id="composer" onsubmit="return sendInput(event)">
+    <input id="input" placeholder="Message the agent or inject an instruction…" autocomplete="off">
+    <button type="submit">Send</button>
+  </form>
+</main>
+
+<section class="right">
+  <div class="card">
+    <h4>System Telemetry</h4>
+    <div class="row"><span>CPU load</span><span id="tCpu">–</span></div>
+    <div class="bar" id="tCpuBar"><i style="width:0%"></i></div>
+    <div class="row"><span>Memory</span><span id="tMem">–</span></div>
+    <div class="bar" id="tMemBar"><i style="width:0%"></i></div>
+    <div class="row"><span>Cores / uptime</span><span id="tSys">–</span></div>
+  </div>
+  <div class="card" id="watchdogCard">
+    <h4>Revenue Watchdog</h4>
+    <div id="watchdogBody" class="scanitem">loading…</div>
+  </div>
+  <div class="card">
+    <h4>Proactive Code Scanner <span id="rcount" class="badge"></span></h4>
+    <div id="repairs" class="scanitem">loading…</div>
+  </div>
+  <div class="card board">
+    <h4>Message Board <span class="badge" id="mbCount">0</span></h4>
+    <div id="board"></div>
+  </div>
+</section>
+
+<script>
+// ---------- state ----------
+let agents = [];
+let selectedId = null;
+let thread = [];          // center stream messages for selected agent
+const alerted = {};       // debounce audio alerts by id+state
+let audioCtx = null;
+
+// ---------- helpers ----------
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function statusOf(a){
+  if(!a.open) return 'ended';
+  const ageH=(()=>{const iso=a.lastActiveAt||a.startedAt;if(!iso)return 1e9;return (Date.now()-new Date(iso).getTime())/3.6e6;})();
+  if(ageH>2) return 'abandoned';
+  if(a.activity==='error') return 'error';
+  if(a.activity==='waiting') return 'waiting';
+  return 'active';
+}
+function dotClass(s){return {active:'active',thinking:'thinking',waiting:'waiting',error:'error',abandoned:'idle',ended:'idle'}[s]||'idle';}
+function loadOf(a){const iso=a.lastActiveAt||a.startedAt;if(!iso)return 0;return (Date.now()-new Date(iso).getTime())/3.6e6;}
+function groupOf(a){return (a.source||'other').toLowerCase();}
+
+// ---------- fleet tree (left rail) ----------
+function renderFleet(){
+  const q=(document.getElementById('fleetSearch').value||'').toLowerCase();
+  const groups={Cron:[],CLI:[],Subagent:[],Other:[]};
+  agents.forEach(a=>{
+    const g=groupOf(a);
+    (groups[g]||groups.Other).push(a);
+  });
+  const order=[['Cron',groups.Cron],['CLI',groups.CLI],['Subagent',groups.Subagent],['Other',groups.Other]];
+  let html='';
+  for(const [name,list] of order){
+    const filtered=list.filter(a=>(a.id+' '+(a.model||'')+' '+(a.name||'')).toLowerCase().includes(q));
+    if(!filtered.length) continue;
+    html+=`<div class="grp">${name} · ${filtered.length}</div>`;
+    filtered.slice(0,120).forEach(a=>{
+      const s=statusOf(a);
+      const st = s==='abandoned'?'abandoned':(s==='error'?'error':(s==='waiting'?'waiting input':(a.open?'active':'ended')));
+      html+=`<div class="agent ${a.id===selectedId?'sel':''}" data-aid="${esc(a.id)}">
+        <div class="nm"><span class="id">${esc((a.name||a.id).slice(0,26))}</span><span class="dot ${dotClass(s)}"></span></div>
+        <div class="meta"><span>${esc(a.model||'?')}</span><span class="st">${esc(st)}</span></div>
+      </div>`;
+    });
+  }
+  document.getElementById('fleet').innerHTML = html || '<div class="empty">no agents match</div>';
+}
+
+// ---------- center stream ----------
+function renderStream(){
+  const el=document.getElementById('stream');
+  if(!selectedId){ el.innerHTML='<div class="empty">Select an agent from the fleet to inspect its live thread.</div>'; return; }
+  if(!thread.length){ el.innerHTML='<div class="empty">No thread yet. Send a message below — it is recorded to the agent\'s board thread.</div>'; return; }
+  el.innerHTML = thread.map(m=>{
+    const cls = m.role==='user'?'user':(m.role==='system'?'sys':'');
+    const who = m.sender||m.role||'agent';
+    const t = m.at? new Date(m.at).toLocaleTimeString() : '';
+    return `<div class="msg ${cls}"><div class="hd">${esc(who)} · ${esc(t)}</div><div class="bd">${esc(m.text||m.content||'')}</div></div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+async function selectAgent(id){
+  selectedId=id;
+  document.getElementById('aid').textContent=id;
+  const a=agents.find(x=>x.id===id);
+  const s=a?statusOf(a):'?';
+  document.getElementById('astate').textContent=s;
+  document.getElementById('astate').className='badge '+(s==='error'?'tag-err':s==='waiting'?'tag-warn':s==='ended'?'':'tag-ok');
+  document.querySelector('.composer input').placeholder=`Message ${id.slice(0,18)}…`;
+  // load history
+  try{ const d=await (await fetch('/messages?id='+encodeURIComponent(id))).json();
+    thread=(d.messages||[]).map(m=>({role:m.role,sender:m.role,at:m.at,text:m.text}));
+  }catch{ thread=[]; }
+  renderStream(); renderFleet();
+}
+
+async function sendInput(e){
+  e.preventDefault();
+  if(!selectedId) return;
+  const inp=document.getElementById('input');
+  const text=inp.value.trim(); if(!text) return;
+  // optimistic local echo
+  thread.push({role:'user',sender:'Jason (admin)',at:new Date().toISOString(),text});
+  renderStream();
+  inp.value='';
+  try{
+    await fetch('/agents/'+encodeURIComponent(selectedId)+'/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+  }catch{}
+}
+
+// ---------- telemetry + cards (right rail) ----------
+async function loadTelemetry(){
+  try{
+    const t=await (await fetch('/telemetry')).json();
+    document.getElementById('tCpu').textContent=t.cpuLoad+'%';
+    const cb=document.getElementById('tCpuBar'); cb.querySelector('i').style.width=Math.min(t.cpuLoad,100)+'%'; cb.className='bar'+(t.cpuLoad>70?' warn':'');
+    document.getElementById('tMem').textContent=t.memPct+'%  ('+t.memUsedMb+'/'+(t.memTotalMb||0)+' MB)';
+    const mb=document.getElementById('tMemBar'); mb.querySelector('i').style.width=Math.min(t.memPct,100)+'%'; mb.className='bar'+(t.memPct>80?' warn':'');
+    document.getElementById('tSys').textContent=t.cores+' cores · '+t.uptimeMin+'m';
+    if(t.watchdog){
+      const w=t.watchdog;
+      document.getElementById('watchdogBody').innerHTML =
+        `<div class="row"><span>state</span><span class="${w.safe?'tag-ok':'tag-warn'}">${w.safe?'cool/idle':'throttled'}</span></div>`+
+        `<div class="row"><span>cpu load</span><span>${w.load!=null?Math.round(w.load):'–'}%</span></div>`+
+        `<div class="row"><span>api :8080</span><span class="${w.apiUp?'tag-ok':'tag-err'}">${w.apiUp?'up':'DOWN'}</span></div>`;
+    }
+    if(t.revenueCronsPaused!=null){
+      document.getElementById('watchdogBody').insertAdjacentHTML('beforeend',
+        `<div class="row"><span>revenue crons paused</span><span class="${t.revenueCronsPaused?'tag-warn':'tag-ok'}">${t.revenueCronsPaused}/6</span></div>`);
+    }
+  }catch{}
+}
+async function loadRepairs(){
+  try{
+    const d=await (await fetch('/repairs')).json();
+    document.getElementById('rcount').textContent=d.count?('('+d.count+')'):'';
+    document.getElementById('repairs').innerHTML = (d.repairs||[]).slice(0,8).map(r=>`<div class="scanitem">• ${esc(r.name)} (${esc((r.issues||[]).length)} notes)</div>`).join('') || 'clean';
+  }catch{}
+}
+let BOARD=[];
+async function loadBoard(){
+  try{ const d=await (await fetch('/messages-board')).json(); BOARD=d.messages||[]; renderBoard(); }catch{}
+}
+function renderBoard(){
+  document.getElementById('mbCount').textContent=BOARD.length;
+  document.getElementById('board').innerHTML = BOARD.slice(-25).reverse().map(m=>
+    `<div class="mb"><div class="mf">${esc(m.from)} ${m.group?`<span class="mg">${esc(m.group)}</span>`:''} <span>${new Date(m.t).toLocaleTimeString()}</span></div><div class="mt">${esc(m.text)}</div></div>`
+  ).join('');
+}
+
+// ---------- live connections ----------
+let es;
+function connect(){
+  es=new EventSource('/stream');
+  es.addEventListener('snapshot',e=>{
+    agents=JSON.parse(e.data).agents;
+    document.getElementById('kActive').textContent=agents.filter(a=>statusOf(a)==='active'||statusOf(a)==='thinking'||statusOf(a)==='waiting').length;
+    document.getElementById('kAb').textContent=agents.filter(a=>statusOf(a)==='abandoned').length;
+    document.getElementById('kErr').textContent=agents.filter(a=>statusOf(a)===undefined?false:statusOf(a)==='error').length;
+    renderFleet();
+    if(selectedId){ const a=agents.find(x=>x.id===selectedId); if(a){ const s=statusOf(a); document.getElementById('astate').textContent=s; } }
+    // audio alert on error / blocked / needs_input transitions
+    agents.forEach(a=>{
+      const s=statusOf(a);
+      if((s==='error') && alerted[a.id+'|err']!==true){ alerted[a.id+'|err']=true; beep(660,0.18); }
+      if(s!=='error') alerted[a.id+'|err']=false;
+      if(s==='waiting' && alerted[a.id+'|wait']!==true){ alerted[a.id+'|wait']=true; beep(520,0.14); }
+      if(s!=='waiting') alerted[a.id+'|wait']=false;
+    });
+  });
+  es.onopen=()=>{ const c=document.getElementById('conn'); c.textContent='STREAM CONNECTED'; c.className='conn live'; };
+  es.onerror=()=>{ const c=document.getElementById('conn'); c.textContent='RECONNECTING'; c.className='conn off'; setTimeout(connect,2000); };
+}
+function connectBoard(){
+  const bs=new EventSource('/messages-stream');
+  bs.onmessage=e=>{ try{ const m=JSON.parse(e.data); BOARD.push(m); if(BOARD.length>200)BOARD.shift(); renderBoard();
+    if(m.kind==='question') beep(440,0.16); }catch{} };
+}
+
+// ---------- audio (WebAudio beep; no file needed) ----------
+function beep(freq,dur){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=freq; o.type='sine'; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.06,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+dur);
+    o.start(); o.stop(audioCtx.currentTime+dur);
+  }catch{}
+}
+document.body.addEventListener('click',()=>{ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } },{once:true});
+
+// ---------- actions ----------
+document.getElementById('fleet').addEventListener('click',e=>{ const c=e.target.closest('.agent'); if(c) selectAgent(c.dataset.aid); });
+document.getElementById('btnWake').addEventListener('click',()=>{ if(!selectedId)return; fetch('/messages-board',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'you',text:'Wake signal → '+selectedId+' — re-running proactive repair scan.',kind:'system',group:'command'})}).then(()=>fetch('/rescan',{method:'POST'})).then(loadRepairs).catch(()=>{}); });
+document.getElementById('btnInterrupt').addEventListener('click',()=>{ if(!selectedId)return; thread.push({role:'system',sender:'system',at:new Date().toISOString(),text:'⏸ Interrupt signal sent to '+selectedId+' (recorded to board thread).'}); renderStream(); fetch('/agents/'+encodeURIComponent(selectedId)+'/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'[INTERRUPT] stop current task and report status'})}).catch(()=>{}); });
+document.getElementById('fleetSearch').addEventListener('input',renderFleet);
+
+// ---------- boot ----------
+connect(); connectBoard(); loadTelemetry(); loadRepairs(); loadBoard();
+setInterval(loadTelemetry,5000); setInterval(loadRepairs,60000); setInterval(loadBoard,8000);
+</script>
+</body>
+</html>

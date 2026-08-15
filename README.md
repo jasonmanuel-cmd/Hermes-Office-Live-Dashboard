@@ -34,10 +34,26 @@ Requires Node >= 22.5 (uses the built-in `node:sqlite`). The store path defaults
 to `%LOCALAPPDATA%/hermes/profiles/cipher/state.db`. Override with env vars
 `--db`, `--stale`, or set `LOCALAPPDATA`.
 
+## Two views
+
+- **Classic** (`/`): the original single-page grid + sidebar tabs.
+- **Command Center** (`/command`): the upgraded 3-column real-time console —
+  fleet tree (grouped by Cron/CLI/Subagent) on the left, live agent thread +
+  HITL input bar in the center, system telemetry + watchdog + message board on
+  the right. Color-coded status dots, WebAudio alerts on ERROR/WAITING/question
+  events, and a two-way agent input that records instructions to the agent's
+  board thread. Open it at http://127.0.0.1:4173/command.
+
+> Scope note: past Hermes sessions are not live processes, so the center input
+> records a real, traceable instruction to the agent's thread (board + audit
+> log) rather than piping into a running STDIN. When Hermes exposes an input
+> API, wire it into `POST /agents/:id/input`.
+
 ## Verify
 
 ```bash
 bash scripts/verify_all.sh   # hits every endpoint + checks W5 UI markers
+bash scripts/verify_cc.sh    # hits /command + /telemetry + /agents/:id/input
 ```
 
 ## ⚠️ CAN IT RUN ON VERCEL? (read before deploying)

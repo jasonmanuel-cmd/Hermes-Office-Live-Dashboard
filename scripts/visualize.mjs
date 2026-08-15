@@ -17,6 +17,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { spawn } from 'node:child_process';
 import { existsSync, writeFileSync, readFileSync, appendFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 import { OfficeEventStore, sessionToAgent } from '@vgalletti/hermes-office';
 
 const POLL_MS = 5000;
@@ -551,6 +552,54 @@ const server = createServer(async (req, res) => {
     runRepairScan();
     return send(res, { ok: true, scanning: scanRunning });
   }
+  // ---------- Command-Center telemetry (CPU/mem/temps + watchdog) ----------
+  let _psutil = null;
+  try { _psutil = await import('psutil'); } catch {}
+  function getTelemetry() {
+    const t = { cpuLoad: 0, memPct: 0, memUsedMb: 0, memTotalMb: 0, cores: os.cpus().length,
+                platform: os.platform(), uptimeMin: Math.round(os.uptime() / 60),
+                watchdog: null, revenueCronsPaused: null };
+    try { t.cpuLoad = Math.round((_psutil ? _psutil.cpu_percent(interval=0.2) : os.loadavg()[0] / t.cores * 100)); } catch {}
+    try { const m = process.memoryUsage(); t.memUsedMb = Math.round(m.rss / 1048576); } catch {}
+    try {
+      const tm = os.totalmem(), fm = os.freemem();
+      t.memTotalMb = Math.round(tm / 1048576);
+      t.memPct = Math.round((1 - fm / tm) * 100);
+    } catch {}
+    try {
+      const w = JSON.parse(readFileSync(`${process.env.LOCALAPPDATA}/hermes-office/watchdog.json`, 'utf8'));
+      t.watchdog = { safe: w.safe, load: w.cpu_load, temp: w.temp_c, apiUp: w.api_up };
+    } catch {}
+    try {
+      const jobs = JSON.parse(readFileSync(`${process.env.LOCALAPPDATA}/hermes/profiles/cipher/cron/jobs.json`, 'utf8')).jobs || [];
+      t.revenueCronsPaused = jobs.filter(j => ['money-machine-30min','money-machine-aggressive','gumroad-monitor','3d3e83d94494','d25c606bd844','ee8248e19170'].includes(j.id) && j.state === 'paused').length;
+    } catch {}
+    return t;
+  }
+  if (url.pathname === '/telemetry') {
+    return send(res, getTelemetry());
+  }
+
+  // ---------- Command-Center: two-way agent input (real record, honest scope) ----------
+  // Posts a message into the agent's thread on the board (visible + persisted) and logs
+  // it to the audit trail. NOTE: past sessions are not live processes, so this does NOT
+  // pipe into a running STDIN — it creates a real, traceable instruction record the human
+  // and the agent can act on. When Hermes exposes an input API, wire it here.
+  if (url.pathname.startsWith('/agents/') && url.pathname.endsWith('/input') && req.method === 'POST') {
+    const id = decodeURIComponent(url.pathname.split('/')[2]);
+    let b = ''; req.on('data', (d) => (b += d));
+    req.on('end', () => {
+      try {
+        const j = JSON.parse(b || '{}');
+        const text = (j.text || '').trim();
+        if (!text) return send(res, { ok: false, error: 'empty text' });
+        const m = postMessage('Jason (admin)', `→ ${id}: ${text}`, 'question', j.group || 'command');
+        audit('agent-input', `${id}: ${text.slice(0, 80)}`, true);
+        return send(res, { ok: true, message: m });
+      } catch { send(res, { ok: false, error: 'bad json' }); }
+    });
+    return;
+  }
   if (url.pathname === '/kpi') {
     const snap = store.snapshot();
     const k = computeKpi(snap);
@@ -564,6 +613,11 @@ const server = createServer(async (req, res) => {
     let b = ''; req.on('data', (d) => (b += d));
     req.on('end', () => { try { send(res, handleAction(JSON.parse(b || '{}'))); } catch { send(res, { ok: false, error: 'bad json' }); } });
     return;
+  }
+  if (url.pathname === '/command') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    try { return res.end(readFileSync(new URL('./command_center.html', import.meta.url), 'utf8')); }
+    catch { return res.end('<h1>command center unavailable</h1>'); }
   }
   // board
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
