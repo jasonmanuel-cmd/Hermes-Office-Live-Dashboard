@@ -1,0 +1,11 @@
+node_modules/
+package-lock.json
+*.log
+hermes-office/
+*.db
+*.sqlite
+messages.json
+audit.log
+watchdog.json
+dedup_proposal.json
+.DS_Store

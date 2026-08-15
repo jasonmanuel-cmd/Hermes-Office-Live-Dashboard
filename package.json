@@ -1,0 +1,19 @@
+{
+  "name": "hermes-office-live-dashboard",
+  "version": "1.0.0",
+  "description": "Live Hermes Agent activity console — reads the real SQLite session store and renders 560+ agents + GitHub/Vercel projects over a local web board.",
+  "type": "commonjs",
+  "main": "scripts/visualize.mjs",
+  "scripts": {
+    "start": "node scripts/visualize.mjs",
+    "verify": "bash scripts/verify_all.sh"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "keywords": ["hermes", "agent", "dashboard", "observability"],
+  "license": "ISC",
+  "dependencies": {
+    "@vgalletti/hermes-office": "^0.1.0"
+  }
+}
