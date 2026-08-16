@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, writeFileSync, readFileSync, appendFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
+import path from 'node:path';
 import { OfficeEventStore, sessionToAgent } from '@vgalletti/hermes-office';
 
 const POLL_MS = 5000;
@@ -616,8 +617,56 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/command') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    try { return res.end(readFileSync(new URL('./command_center.html', import.meta.url), 'utf8')); }
-    catch { return res.end('<h1>command center unavailable</h1>'); }
+    try { return res.end(readFileSync(new URL('./command_center.html', import.meta.url))); }
+    catch (e) { res.writeHead(500); return res.end('command_center.html missing'); }
+  }
+  // Product Lab
+  if (url.pathname === '/products-lab') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    try { return res.end(readFileSync(new URL('./product_lab.html', import.meta.url))); }
+    catch (e) { res.writeHead(500); return res.end('product_lab.html missing'); }
+  }
+  // Product Lab API: registry
+  if (url.pathname === '/products/registry') {
+    try {
+      const rg = path.join(process.env.LOCALAPPDATA, 'hermes-office', 'product_registry.json');
+      const data = existsSync(rg) ? JSON.parse(readFileSync(rg, 'utf8')) : [];
+      return send(res, data);
+    } catch (e) { return send(res, { error: String(e) }, 500); }
+  }
+  // Product Lab API: scaffolds
+  if (url.pathname === '/products/scaffolds') {
+    try {
+      const pd = path.join(process.env.LOCALAPPDATA, 'COAI-Products');
+      const out = [];
+      if (existsSync(pd)) {
+        for (const d of readdirSync(pd)) {
+          const base = path.join(pd, d);
+          if (!statSync(base).isDirectory()) continue;
+          const files = [];
+          function walk(dir, prefix) {
+            for (const f of readdirSync(dir)) {
+              const fp = path.join(dir, f);
+              if (statSync(fp).isDirectory()) walk(fp, prefix + f + '/');
+              else files.push({ name: prefix + f, size: statSync(fp).st_size });
+            }
+          }
+          walk(base, '');
+          // read demand/flaws from registry
+          let meta = {};
+          try {
+            const rg = path.join(process.env.LOCALAPPDATA, 'hermes-office', 'product_registry.json');
+            if (existsSync(rg)) {
+              const reg = JSON.parse(readFileSync(rg, 'utf8'));
+              const found = reg.find(p => p.path && p.path.includes(d));
+              if (found) meta = { demand: found.audit?.demand_score, flaws: found.audit?.flaws, verdict: found.audit?.verdict };
+            }
+          } catch {}
+          out.push({ idea: d, path: base, fileCount: files.length, files, ...meta });
+        }
+      }
+      return send(res, out);
+    } catch (e) { return send(res, { error: String(e) }, 500); }
   }
   // board
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

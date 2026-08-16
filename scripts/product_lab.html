@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COAI Product Lab</title>
+<style>
+:root{--bg:#0B0F17;--card:#111A26;--border:#1E293B;--txt:#C9D4E3;--muted:#6B7C93;--cyan:#22D3EE;--emerald:#34D399;--amber:#FBBF24;--rose:#FB7185;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg);color:var(--txt);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:#0D131F;position:sticky;top:0;z-index:20}
+header .logo{font-weight:800;letter-spacing:1px;color:var(--cyan);font-size:14px}
+header .stat{font-size:11px;color:var(--muted)}
+header .stat b{color:var(--emerald)}
+a.back{color:var(--cyan);font-size:12px;text-decoration:none}
+a.back:hover{text-decoration:underline}
+.wrap{max-width:1200px;margin:0 auto;padding:20px}
+.section{margin-bottom:28px}
+.section h2{font-size:13px;letter-spacing:1px;color:var(--cyan);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card:hover{border-color:#2DD4BF}
+.card .title{font-weight:700;font-size:14px;color:#fff;margin-bottom:6px;word-break:break-word}
+.card .meta{font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px}
+.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.b-proceed{background:#052E16;color:var(--emerald);border:1px solid #065F46}
+.b-reconsider{background:#450A0A;color:var(--rose);border:1px solid #991B1B}
+.b-pivot{background:#451A03;color:var(--amber);border:1px solid:#92400E}
+.b-blocked{background:#1E293B;color:var(--muted);border:1px solid:#334155}
+.bar{height:6px;border-radius:3px;background:#1E293B;margin:8px 0;overflow:hidden}
+.bar > div{height:100%;border-radius:3px}
+.bar-dem{background:linear-gradient(90deg,#0EA5E9,#22D3EE)}
+.flaw{color:var(--rose);font-size:11px;margin-top:6px}
+.improve{color:var(--emerald);font-size:11px;margin-top:3px}
+.tree{font-size:12px;line-height:1.7;color:var(--txt)}
+.tree .file{color:var(--cyan)}
+.tree .dir{color:var(--amber)}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:40px 20px}
+.board{font-size:12px;line-height:1.6}
+.board .row{padding:8px 0;border-bottom:1px solid var(--border)}
+.board .row:last-child{border:none}
+.board .from{font-weight:700;color:var(--cyan)}
+.board .time{color:var(--muted);font-size:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⚡ COAI PRODUCT LAB</div>
+  <div class="stat" id="stat">loading…</div>
+  <a class="back" href="/">← back to dashboard</a>
+</header>
+<div class="wrap">
+
+  <div class="section">
+    <h2>📦 Product Registry</h2>
+    <div id="registry" class="grid"><div class="empty">loading…</div></div>
+  </div>
+
+  <div class="section">
+    <h2>🧪 Research &amp; Findings</h2>
+    <div id="findings" class="card"><div class="empty">loading…</div></div>
+  </div>
+
+  <div class="section">
+    <h2>📋 Team Board (last 20 posts)</h2>
+    <div id="board" class="card board"><div class="empty">loading…</div></div>
+  </div>
+
+</div>
+
+<script>
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function badge(v){return `<span class="badge b-${(v||'').replace(/[^a-z]/g,'')||'blocked'}">${esc(v||'unknown')}</span>`}
+
+async function loadRegistry(){
+  try{
+    const r=await fetch('/products/registry');
+    const data=await r.json();
+    const el=document.getElementById('registry');
+    if(!data.length){el.innerHTML='<div class="empty">No products built yet — the team is still on cycle 1.</div>';return}
+    el.innerHTML=data.map(p=>{
+      const a=p.audit||{};
+      return `<div class="card">
+        <div class="title">${esc(p.idea)}</div>
+        <div class="meta">
+          ${badge(a.verdict)}
+          <span>demand <b style="color:var(--cyan)">${a.demand_score||0}/100</b></span>
+          <span>cycle #${p.cycle||'?'}</span>
+          ${p.last_rechecked?`♻️ ${p.last_rechecked.slice(0,16)}`:''}
+        </div>
+        <div class="bar"><div class="bar-dem" style="width:${a.demand_score||0}%"></div></div>
+        ${(a.flaws||[]).map(f=>`<div class="flaw">⚠️ ${esc(f)}</div>`).join('')}
+        ${(a.improvements||[]).map(i=>`<div class="improve">✅ ${esc(i)}</div>`).join('')}
+        <div class="improve" style="margin-top:8px">📁 ${esc(p.path||'no scaffold')}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('stat').innerHTML=`<b>${data.length}</b> product${data.length-1?'s':''} tracked`;
+  }catch(e){
+    document.getElementById('registry').innerHTML=`<div class="empty">error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadScaffolds(){
+  try{
+    const r=await fetch('/products/scaffolds');
+    const data=await r.json();
+    const el=document.getElementById('findings');
+    if(!data.length){el.innerHTML='<div class="empty">No scaffolds generated yet.</div>';return}
+    el.innerHTML=data.map(s=>{
+      const tree=(s.files||[]).map(f=>`<div class="tree"><span class="file">📄 ${esc(f.name)}</span> <span style="color:var(--muted)">(${f.size}B)</span></div>`).join('');
+      return `<div class="card" style="margin-bottom:12px">
+        <div class="title">${esc(s.idea)}</div>
+        <div class="meta"><span>demand <b style="color:var(--cyan)">${s.demand||'?'}/100</b></span><span>${s.fileCount} files</span></div>
+        <details><summary style="cursor:pointer;color:var(--cyan);font-size:12px;margin-bottom:8px">📂 file tree</summary>${tree}</details>
+        ${(s.flaws||[]).map(f=>`<div class="flaw">⚠️ ${esc(f)}</div>`).join('')}
+      </div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('findings').innerHTML=`<div class="empty">error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadBoard(){
+  try{
+    const r=await fetch('/messages-board');
+    const data=await r.json();
+    const el=document.getElementById('board');
+    const rows=(data||[]).slice(-20).reverse().map(m=>{
+      return `<div class="row"><span class="from">${esc(m.from||'unknown')}</span> <span class="time">${esc(m.time||'')}</span><div>${esc(m.text||'')}</div></div>`;
+    }).join('');
+    el.innerHTML=rows||'<div class="empty">board empty</div>';
+  }catch(e){
+    document.getElementById('board').innerHTML=`<div class="empty">error: ${esc(e.message)}</div>`;
+  }
+}
+
+loadRegistry();loadScaffolds();loadBoard();
+setInterval(loadRegistry,5000);setInterval(loadScaffolds,5000);setInterval(loadBoard,3000);
+</script>
+</body>
+</html>
