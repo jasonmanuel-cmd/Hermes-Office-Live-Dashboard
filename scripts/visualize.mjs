@@ -875,9 +875,28 @@ function boardHtml() {
   function setConn(state){
     const el = document.getElementById('conn');
     const map = { live:['Live','#10b981'], recon:['Reconnecting…','#f59e0b'], off:['Offline','#ef4444'] };
-    const [txt,col] = map[state];
+    const [txt,col] = map[state] || map.recon;
     el.textContent = txt; el.style.color = col; el.style.borderColor = col;
   }
+  // B1/B2/B5: SSE reconnect. EventSource auto-reconnects natively — do NOT call
+  // es.close()+setTimeout (that creates a reconnect storm and sticks on
+  // "Reconnecting"). Just reflect state; flip back to Live on the next message.
+  let es, backoff = 1000, lastMsgAt = Date.now();
+  function connect(){
+    es = new EventSource('/stream');
+    es.onopen = () => { setConn('live'); backoff = 1000; };
+    es.onerror = () => { setConn('recon'); }; // transient; native retry continues
+    es.addEventListener('snapshot', e => {
+      lastMsgAt = Date.now();
+      agents = JSON.parse(e.data).agents;
+      lastSnap = lastMsgAt;
+      setConn('live'); backoff = 1000;
+      render(); renderAbview();
+    });
+  }
+  function forceReconnect(){ try { es.close(); } catch {} backoff = 1000; setConn('recon'); connect(); }
+  window.addEventListener('online', () => forceReconnect()); // B6: recover when network returns
+  connect();
   function render(){
     grid.innerHTML = visible().map(card).join('') || '<div class="meta dim">no matches</div>';
     renderKpiFromAgents();
@@ -1027,22 +1046,6 @@ function boardHtml() {
     };
     te.onerror = () => {}; // E5: silent; browser auto-reconnects
   }
-  // B1/B2/B5: SSE with backoff reconnect (1s→2s→5s→10s cap) and clean resubscribe.
-  let es, backoff = 1000;
-  function connect(){
-    es = new EventSource('/stream');
-    es.onopen = () => { setConn('live'); backoff = 1000; };
-    es.onerror = () => {
-      setConn(backoff >= 10000 ? 'off' : 'recon');
-      es.close(); // B5: drop old handlers before reconnect
-      setTimeout(connect, backoff);
-      backoff = Math.min(backoff * 2, 10000);
-    };
-    es.addEventListener('snapshot', e => { agents = JSON.parse(e.data).agents; lastSnap = Date.now(); render(); renderAbview(); });
-  }
-  function forceReconnect(){ try { es.close(); } catch {} backoff = 1000; setConn('recon'); connect(); }
-  window.addEventListener('online', () => forceReconnect()); // B6: recover when network returns
-  connect();
 
   // ---------- Wave 5: Message board (J) ----------
   let mbFilterGroup = '';

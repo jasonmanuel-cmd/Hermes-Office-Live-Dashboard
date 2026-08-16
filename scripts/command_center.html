@@ -280,7 +280,7 @@ function connect(){
     agents=JSON.parse(e.data).agents;
     document.getElementById('kActive').textContent=agents.filter(a=>statusOf(a)==='active'||statusOf(a)==='thinking'||statusOf(a)==='waiting').length;
     document.getElementById('kAb').textContent=agents.filter(a=>statusOf(a)==='abandoned').length;
-    document.getElementById('kErr').textContent=agents.filter(a=>statusOf(a)===undefined?false:statusOf(a)==='error').length;
+    document.getElementById('kErr').textContent=agents.filter(a=>statusOf(a)==='error').length;
     renderFleet();
     if(selectedId){ const a=agents.find(x=>x.id===selectedId); if(a){ const s=statusOf(a); document.getElementById('astate').textContent=s; } }
     // audio alert on error / blocked / needs_input transitions
@@ -292,8 +292,9 @@ function connect(){
       if(s!=='waiting') alerted[a.id+'|wait']=false;
     });
   });
+  // Native EventSource auto-reconnect handles drops; just reflect state.
   es.onopen=()=>{ const c=document.getElementById('conn'); c.textContent='STREAM CONNECTED'; c.className='conn live'; };
-  es.onerror=()=>{ const c=document.getElementById('conn'); c.textContent='RECONNECTING'; c.className='conn off'; setTimeout(connect,2000); };
+  es.onerror=()=>{ const c=document.getElementById('conn'); c.textContent='RECONNECTING'; c.className='conn off'; };
 }
 function connectBoard(){
   const bs=new EventSource('/messages-stream');
