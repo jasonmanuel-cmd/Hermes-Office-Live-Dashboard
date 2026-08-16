@@ -668,6 +668,14 @@ const server = createServer(async (req, res) => {
       return send(res, out);
     } catch (e) { return send(res, { error: String(e) }, 500); }
   }
+  // Product Lab API: deployed products only
+  if (url.pathname === '/products/deployed') {
+    try {
+      const rg = path.join(process.env.LOCALAPPDATA, 'hermes-office', 'product_registry.json');
+      const data = existsSync(rg) ? JSON.parse(readFileSync(rg, 'utf8')) : [];
+      return send(res, data.filter(p => p.deploy_url));
+    } catch (e) { return send(res, { error: String(e) }, 500); }
+  }
   // Product Lab API: research report
   if (url.pathname.startsWith('/products/research/')) {
     try {
