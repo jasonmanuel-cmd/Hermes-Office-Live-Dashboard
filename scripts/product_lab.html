@@ -66,6 +66,11 @@ a.back:hover{text-decoration:underline}
     <div id="board" class="card board"><div class="empty">loading…</div></div>
   </div>
 
+  <div class="section">
+    <h2>🔬 Research Reports</h2>
+    <div id="research" class="grid"><div class="empty">loading…</div></div>
+  </div>
+
 </div>
 
 <script>
@@ -134,8 +139,38 @@ async function loadBoard(){
   }
 }
 
-loadRegistry();loadScaffolds();loadBoard();
-setInterval(loadRegistry,5000);setInterval(loadScaffolds,5000);setInterval(loadBoard,3000);
+async function loadResearch(){
+  try{
+    const sc=await fetch('/products/scaffolds');
+    const scaffolds=await sc.json();
+    const el=document.getElementById('research');
+    if(!scaffolds.length){el.innerHTML='<div class="empty">No research yet. Run the pipeline first.</div>';return}
+    let html='';
+    for(const s of scaffolds){
+      const slug=s.slug||s.idea;
+      let report='',spec='';
+      try{const rr=await fetch('/products/research/'+slug);const rd=await rr.json();report=rd.content||'';}catch{}
+      try{const sp=await fetch('/products/spec/'+slug);const sd=await sp.json();spec=sd.content||'';}catch{}
+      html+=`<div class="card">
+        <div class="title">${esc(s.idea)}</div>
+        <div class="meta">${badge(s.verdict)}<span>demand <b style="color:var(--cyan)">${s.demand||'?'}/100</b></span><span>${s.fileCount} files</span></div>
+        <details open><summary style="cursor:pointer;color:var(--cyan);font-size:12px;margin:8px 0">📊 Research Report</summary>
+          <pre style="white-space:pre-wrap;font-size:11px;color:var(--txt);max-height:300px;overflow:auto;background:#0D131F;padding:12px;border-radius:6px;border:1px solid var(--border)">${esc(report||'no RESEARCH.md')}</pre>
+        </details>
+        <details><summary style="cursor:pointer;color:var(--cyan);font-size:12px;margin-bottom:8px">📋 Product Spec</summary>
+          <pre style="white-space:pre-wrap;font-size:11px;color:var(--txt);max-height:200px;overflow:auto;background:#0D131F;padding:12px;border-radius:6px;border:1px solid var(--border)">${esc(spec||'no product-spec.md')}</pre>
+        </details>
+        ${(s.flaws||[]).map(f=>`<div class="flaw">⚠️ ${esc(f)}</div>`).join('')}
+      </div>`;
+    }
+    el.innerHTML=html;
+  }catch(e){
+    document.getElementById('research').innerHTML=`<div class="empty">error: ${esc(e.message)}</div>`;
+  }
+}
+
+loadRegistry();loadScaffolds();loadBoard();loadResearch();
+setInterval(loadRegistry,5000);setInterval(loadScaffolds,5000);setInterval(loadBoard,3000);setInterval(loadResearch,5000);
 </script>
 </body>
 </html>

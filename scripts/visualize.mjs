@@ -659,13 +659,31 @@ const server = createServer(async (req, res) => {
             if (existsSync(rg)) {
               const reg = JSON.parse(readFileSync(rg, 'utf8'));
               const found = reg.find(p => p.path && p.path.includes(d));
-              if (found) meta = { demand: found.audit?.demand_score, flaws: found.audit?.flaws, verdict: found.audit?.verdict };
+              if (found) meta = { demand: found.audit?.demand_score, flaws: found.audit?.flaws, verdict: found.audit?.verdict, slug: found.slug };
             }
           } catch {}
           out.push({ idea: d, path: base, fileCount: files.length, files, ...meta });
         }
       }
       return send(res, out);
+    } catch (e) { return send(res, { error: String(e) }, 500); }
+  }
+  // Product Lab API: research report
+  if (url.pathname.startsWith('/products/research/')) {
+    try {
+      const slug = url.pathname.split('/').pop();
+      const rp = path.join(process.env.LOCALAPPDATA, 'COAI-Products', slug, 'RESEARCH.md');
+      if (!existsSync(rp)) return send(res, { error: 'no research report' }, 404);
+      return send(res, { slug, content: readFileSync(rp, 'utf8') });
+    } catch (e) { return send(res, { error: String(e) }, 500); }
+  }
+  // Product Lab API: product spec
+  if (url.pathname.startsWith('/products/spec/')) {
+    try {
+      const slug = url.pathname.split('/').pop();
+      const sp = path.join(process.env.LOCALAPPDATA, 'COAI-Products', slug, 'product-spec.md');
+      if (!existsSync(sp)) return send(res, { error: 'no product spec' }, 404);
+      return send(res, { slug, content: readFileSync(sp, 'utf8') });
     } catch (e) { return send(res, { error: String(e) }, 500); }
   }
   // board
