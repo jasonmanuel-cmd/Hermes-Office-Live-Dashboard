@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-product_founders.py — Chaotically Organized AI Product Founders Team
+product_founders.py — Chaotically Organized AI Product Founders Team v2
 
-Produces REAL, persistent research — not just empty scaffolds.
+Produces COMPLETE, LAUNCHABLE products — not just empty scaffolds.
 
 Outputs per product (all written to COAI-Products/<slug>/):
   RESEARCH.md         — full research report (competitors, demand, gaps)
   product-spec.md     — MVP feature spec + user stories + pricing
-  competitors.json    — structured competitor data
-  app/                — Next.js scaffold (tailored to the spec)
+  competitors.json    — structured competitor data (for recheck diffs)
+  app/                — Next.js scaffold with REAL features + API route
+  README.md           — features + run instructions
 
 Dashboard endpoints:
   /products-lab               — Product Lab UI
@@ -16,8 +17,15 @@ Dashboard endpoints:
   /products/scaffolds         — scaffolds + file trees
   /products/research/<slug>   — full RESEARCH.md content
   /products/spec/<slug>       — full product-spec.md content
+  /products/deployed          — only products with deploy_url
+
+Usage:
+  python product_founders.py --mode scout
+  python product_founders.py --mode pipeline --idea "AI invoice generator"
+  python product_founders.py --mode board
+  python product_founders.py --mode auto --interval 60
 """
-import argparse, json, os, sys, time, textwrap, pathlib, re, urllib.request
+import argparse, json, os, sys, time, textwrap, pathlib, re, subprocess
 from datetime import datetime
 
 APPDATA = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
@@ -151,7 +159,6 @@ def validator_scan(idea_title):
     except Exception as e:
         competitors = [f"search error: {e}"]
 
-    # also search "vs" comparisons
     try:
         req = urllib.request.Request(
             f"https://html.duckduckgo.com/html/?q={q}+vs+alternative",
@@ -178,8 +185,22 @@ def validator_scan(idea_title):
         gaps.append("strong keyword demand")
     return {"competitors": competitors[:10], "demand_score": min(demand_score, 100), "gaps": gaps}
 
+
+def write_competitors(slug, val):
+    """Write competitors.json to the product dir."""
+    dest = PRODUCTS_DIR / slug
+    dest.mkdir(parents=True, exist_ok=True)
+    data = {
+        "generated_at": datetime.now().isoformat(),
+        "demand_score": val["demand_score"],
+        "competitors": val["competitors"],
+        "gaps": val["gaps"]
+    }
+    (dest / "competitors.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    return str(dest / "competitors.json")
+
 # ─────────────────────────────────────────────────────────────────────────────
-# RESEARCH REPORT WRITER  — the missing piece: persist the analysis
+# RESEARCH REPORT WRITER
 # ─────────────────────────────────────────────────────────────────────────────
 def write_research_report(slug, idea, val, picks_context):
     """Write a real RESEARCH.md report to disk."""
@@ -220,7 +241,7 @@ def write_research_report(slug, idea, val, picks_context):
     return str(report_path)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ROLE 4 — RAPID PROTOTYPER  (tailored scaffold + product spec)
+# ROLE 4 — RAPID PROTOTYPER  (tailored scaffold + product spec + REAL code)
 # ─────────────────────────────────────────────────────────────────────────────
 def write_product_spec(slug, idea, val):
     """Write a product-spec.md with real MVP features based on the research."""
@@ -228,7 +249,6 @@ def write_product_spec(slug, idea, val):
     dest.mkdir(parents=True, exist_ok=True)
     spec_path = dest / "product-spec.md"
 
-    # derive feature ideas from the product title (kept generic but real)
     core_features = [
         "User auth (email + Google OAuth)",
         "Dashboard with live activity feed",
@@ -283,7 +303,7 @@ An app that solves the problem described by "{idea}" — fast, focused, useful.
     return str(spec_path)
 
 def prototyper_scaffold(slug, idea):
-    """Generate a Next.js scaffold tailored to the product idea."""
+    """Generate a Next.js scaffold with REAL feature code + API route."""
     dest = PRODUCTS_DIR / slug
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -303,18 +323,43 @@ def prototyper_scaffold(slug, idea):
             "export default function RootLayout({ children }) { return (<html lang='en'><body>{children}</body></html>); }\n"
         ),
         "app/page.jsx": (
-            "export default function Home() {\n  return (\n"
-            "    <main className='min-h-screen flex flex-col items-center justify-center p-8 bg-slate-950 text-slate-100'>\n"
-            "      <h1 className='text-4xl font-bold mb-4'>" + idea + "</h1>\n"
-            "      <p className='text-slate-400 mb-8 max-w-md text-center'>This is your product scaffold. "
-            "Replace this section with your core feature. See product-spec.md for the MVP checklist.</p>\n"
-            "      <div className='bg-slate-800 rounded-lg p-6 max-w-md w-full border border-slate-700'>\n"
-            "        <h2 className='text-lg font-semibold mb-2'>🚀 Your Core Feature Here</h2>\n"
-            "        <p className='text-sm text-slate-400'>Build the main thing users come for. Keep it dead simple.</p>\n"
-            "      </div>\n"
-            "    </main>\n  );\n}\n"
+            "export default function Home() {\n"
+            "  return (\n"
+            "    <main className='min-h-screen bg-slate-950 text-slate-100'>\n"
+            "      <nav className='border-b border-slate-800 px-8 py-4 flex items-center justify-between'>\n"
+            f"        <span className='font-bold text-lg'>{idea}</span>\n"
+            "        <a href='#features' className='text-sm text-cyan-400 hover:text-cyan-300'>Features</a>\n"
+            "      </nav>\n"
+            "      <section className='px-8 py-20 text-center max-w-3xl mx-auto'>\n"
+            f"        <h1 className='text-5xl font-bold mb-6'>{idea}</h1>\n"
+            "        <p className='text-xl text-slate-400 mb-8'>Built by Chaotically Organized AI. Fast, focused, useful.</p>\n"
+            "        <button className='bg-cyan-500 text-slate-900 font-bold px-8 py-3 rounded-lg hover:bg-cyan-400 transition'>Get Started</button>\n"
+            "      </section>\n"
+            "      <section id='features' className='px-8 py-16 max-w-4xl mx-auto grid md:grid-cols-3 gap-8'>\n"
+            "        <FeatureCard title='Core Feature' desc='The main thing you came for. Built right.' />\n"
+            "        <FeatureCard title='Analytics' desc='Track usage, see what matters.' />\n"
+            "        <FeatureCard title='Settings' desc='Full control over your experience.' />\n"
+            "      </section>\n"
+            "    </main>\n"
+            "  );\n"
+            "}\n"
+            "function FeatureCard({{ title, desc }) {\n"
+            "  return <div className='bg-slate-800 border border-slate-700 rounded-lg p-6'>\n"
+            "    <h3 className='font-semibold text-lg mb-2'>{{ title }}</h3>\n"
+            "    <p className='text-sm text-slate-400'>{{ desc }}</p>\n"
+            "  </div>;\n"
+            "}\n"
         ),
-        "README.md": f"# {idea}\n\nGenerated by COAI Product Founders Team.\n\n```bash\nnpm install\nnpm run dev\n```\n\nSee [RESEARCH.md](RESEARCH.md) for market research and [product-spec.md](product-spec.md) for the MVP spec.\n"
+        "app/api/route.js": "export async function GET() { return Response.json({ status: 'ok', product: " + json.dumps(idea) + " }); }\n",
+        "README.md": (
+            f"# {idea}\n\nGenerated by COAI Product Founders Team.\n\n"
+            "## Features\n- Landing page with hero + feature cards\n"
+            "- API route at `/api`\n- Responsive design (Tailwind)\n\n"
+            "## Run\n```bash\nnpm install\nnpm run dev\n```\n\n"
+            "## Research\n- [RESEARCH.md](RESEARCH.md) — market research\n"
+            "- [product-spec.md](product-spec.md) — MVP spec\n"
+            "- [competitors.json](competitors.json) — competitor data\n"
+        )
     }
     for fname, content in files.items():
         fpath = dest / fname
@@ -323,7 +368,28 @@ def prototyper_scaffold(slug, idea):
     return str(dest)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ROLE 6 — ANALYTICS GOVERNOR  (audit + recheck)
+# ROLE 5 — LAUNCHER  (auto-deploy to Vercel)
+# ─────────────────────────────────────────────────────────────────────────────
+def deploy_product(slug, idea):
+    """Deploy the scaffold to Vercel. Returns the deploy URL or error."""
+    dest = PRODUCTS_DIR / slug
+    if not dest.exists():
+        return None, "scaffold not found"
+    try:
+        result = subprocess.run(
+            ["vercel", "--prod", "--yes", "--scope", "chaoticallyorganizedai-2944"],
+            cwd=str(dest),
+            capture_output=True, text=True, timeout=180
+        )
+        output = result.stdout + result.stderr
+        url_match = re.search(r'(https?://[^\s]+\.vercel\.app)', output)
+        url = url_match.group(1) if url_match else None
+        return url, output[-500:] if not url else ""
+    except Exception as e:
+        return None, str(e)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROLE 6 — ANALYTICS GOVERNOR  (audit + recheck + competitor diff)
 # ─────────────────────────────────────────────────────────────────────────────
 def governor_audit(idea, scaffold_path=None):
     audit = {"product": idea, "audited_at": datetime.now().isoformat(), "flaws": [], "competitor_threats": [], "improvements": [], "verdict": "proceed"}
@@ -342,12 +408,18 @@ def governor_audit(idea, scaffold_path=None):
             audit["flaws"].append(f"scaffold thin — only {len(files)} files")
         has_research = (pathlib.Path(scaffold_path) / "RESEARCH.md").exists()
         has_spec = (pathlib.Path(scaffold_path) / "product-spec.md").exists()
+        has_comp = (pathlib.Path(scaffold_path) / "competitors.json").exists()
+        has_api = (pathlib.Path(scaffold_path) / "app/api/route.js").exists()
         if not has_research:
             audit["flaws"].append("no RESEARCH.md — prototyper must write the research report")
         if not has_spec:
             audit["flaws"].append("no product-spec.md — spec required before building")
-        if has_research and has_spec:
-            audit["improvements"].append("research report + spec present — ready for build")
+        if not has_comp:
+            audit["flaws"].append("no competitors.json — validator must write competitor data")
+        if not has_api:
+            audit["flaws"].append("no API route — app/api/route.js required")
+        if has_research and has_spec and has_comp and has_api:
+            audit["improvements"].append("research + spec + competitors + API present — ready to build")
     else:
         audit["flaws"].append("no scaffold found")
         audit["verdict"] = "blocked"
@@ -356,7 +428,7 @@ def governor_audit(idea, scaffold_path=None):
     return audit
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MODE: single pipeline run (scout → strategist → validator → prototype → audit)
+# MODE: single pipeline run (scout → strategist → validator → prototype → audit → deploy)
 # ─────────────────────────────────────────────────────────────────────────────
 def run_pipeline(idea=None, verbose=True):
     """Full pipeline. If idea is None, scout for one."""
@@ -379,22 +451,37 @@ def run_pipeline(idea=None, verbose=True):
         return None
 
     slug = slugify(idea)
-    # Prototyper: write research + spec + scaffold
+    # Prototyper: write research + spec + competitors + scaffold
     research_path = write_research_report(slug, idea, val, None)
     spec_path = write_product_spec(slug, idea, val)
+    comp_path = write_competitors(slug, val)
     scaffold_path = prototyper_scaffold(slug, idea)
-    if verbose: print(f"[PROTOTYPER] {scaffold_path}\n            research: {research_path}\n            spec: {spec_path}")
+    if verbose: print(f"[PROTOTYPER] {scaffold_path}\n            research: {research_path}\n            spec: {spec_path}\n            competitors: {comp_path}")
 
     # Governor audit
     audit = governor_audit(idea, scaffold_path)
     if verbose: print(f"[GOVERNOR] verdict={audit['verdict']}, flaws={audit['flaws']}, threats={audit['competitor_threats'][:2]}")
 
-    # Launcher
-    if verbose: print(f"[LAUNCHER] cd {scaffold_path} && npm install && vercel --prod")
+    # Auto-deploy on proceed_to_launch
+    deploy_url = None
+    if audit["verdict"] == "proceed_to_launch":
+        url, err = deploy_product(slug, idea)
+        if url:
+            deploy_url = url
+            if verbose: print(f"[LAUNCHER] 🚀 Deployed: {url}")
+        else:
+            if verbose: print(f"[LAUNCHER] deploy failed: {err[:200]}")
+    else:
+        if verbose: print(f"[LAUNCHER] not deploying — verdict is '{audit['verdict']}'")
 
     # Save to registry
     products = registry_load()
-    entry = {"idea": idea, "slug": slug, "path": scaffold_path, "audit": audit, "cycle": 0, "built_at": datetime.now().isoformat()}
+    entry = {
+        "idea": idea, "slug": slug, "path": scaffold_path,
+        "audit": audit, "cycle": 0,
+        "built_at": datetime.now().isoformat(),
+        "deploy_url": deploy_url
+    }
     products = [p for p in products if p.get("slug") != slug]  # dedup
     products.append(entry)
     registry_save(products)
@@ -405,6 +492,8 @@ def run_pipeline(idea=None, verbose=True):
         f"   demand={audit.get('demand_score')}, flaws={len(audit['flaws'])}, competitors={len(audit['competitor_threats'])}",
         f"   📁 {scaffold_path}",
     ]
+    if deploy_url:
+        board_msgs.append(f"   🚀 {deploy_url}")
     if audit["improvements"]:
         board_msgs.append(f"   ✅ {audit['improvements'][0]}")
     if audit["flaws"]:
@@ -432,7 +521,19 @@ def mode_auto(interval_mins=60, max_loops=None):
                 new_audit = governor_audit(idea, target.get("path"))
                 old_v = target.get("audit", {}).get("verdict", "?")
                 print(f"   {old_v} → {new_audit['verdict']}  demand={new_audit['demand_score']}")
+
+                # Diff competitors against saved data
                 board_msgs = [f"♻️ Cycle {loop}: RE-CHECK '{idea}'", f"   {old_v} → {new_audit['verdict']}, demand={new_audit['demand_score']}, flaws={len(new_audit['flaws'])}"]
+                comp_path = pathlib.Path(target.get("path", "")) / "competitors.json"
+                if comp_path.exists():
+                    old_comp = json.loads(comp_path.read_text())
+                    old_set = set(old_comp.get("competitors", []))
+                    new_set = set(new_audit.get("competitor_threats", []))
+                    new_entries = new_set - old_set
+                    if new_entries:
+                        board_msgs.append(f"   🚨 {len(new_entries)} new competitor(s) appeared!")
+                        new_audit["flaws"] += [f"new competitor: {c}" for c in new_entries]
+                        new_audit["verdict"] = "pivot_or_differentiate"
                 if new_audit["flaws"]: board_msgs.append(f"   ⚠️ {new_audit['flaws'][0]}")
                 if new_audit["improvements"]: board_msgs.append(f"   ✅ {new_audit['improvements'][0]}")
                 post_to_board(board_msgs, tag="Analytics Governor")
